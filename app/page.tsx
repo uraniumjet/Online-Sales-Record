@@ -1,65 +1,244 @@
-import Image from "next/image";
+'use client';
+import { useEffect, useState } from 'react';
+import * as api from '../src/lib/api'; 
+import { 
+  Users, Plus, Search, Printer, Plane, X, Receipt, Save, 
+  History, Eye, EyeOff, Trash2, Edit3, MessageCircle, 
+  TrendingUp, Download, UserPlus, Globe, Check
+} from 'lucide-react';
 
-export default function Home() {
+export default function Dashboard() {
+  const [customers, setCustomers] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('CUSTOMERS');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFinancials, setShowFinancials] = useState(false);
+  const [panelOpen, setPanelOpen] = useState<'SALE' | 'CLIENT' | 'PROFILE' | null>(null);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+
+  const [saleForm, setSaleForm] = useState({ 
+    customer: '', service_type: 'PRINTING', description: 'General Service', revenue: 0, cost: 0, date: new Date().toISOString().split('T')[0] 
+  });
+  
+  // State for Customer Form
+  const [custForm, setCustForm] = useState({ name: '', phone: '' });
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [c, t] = await Promise.all([api.getCustomers(), api.getTransactions()]);
+      setCustomers(c || []);
+      setTransactions(t || []);
+    } catch (err) { console.error("Sync Error:", err); }
+    setLoading(false);
+  };
+
+  const totalRevenue = transactions.reduce((sum, t: any) => sum + (parseFloat(t.revenue) || 0), 0);
+  const totalProfit = transactions.reduce((sum, t: any) => sum + (parseFloat(t.profit) || 0), 0);
+
+  const handleSaleSubmit = async (e: any) => {
+    e.preventDefault();
+    try {
+      const payload = { ...saleForm, profit: saleForm.revenue - saleForm.cost, customer: parseInt(saleForm.customer) };
+      await api.createTransaction(payload);
+      setPanelOpen(null);
+      loadData();
+    } catch (err) { alert("Error saving sale."); }
+  };
+
+  // --- FIXED CUSTOMER LOGIC ---
+  const handleCustSubmit = async (e: any) => {
+    e.preventDefault();
+    try {
+      if (selectedItem) {
+        // Use updateCustomer endpoint, NOT updateTransaction
+        await api.updateCustomer(selectedItem.id, custForm); 
+      } else {
+        await api.createCustomer(custForm);
+      }
+      setPanelOpen(null);
+      setSelectedItem(null);
+      setCustForm({ name: '', phone: '' }); // Clear form
+      loadData();
+    } catch (err) { alert("Error saving customer. Ensure your API has updateCustomer defined."); }
+  };
+
+  const handleDeleteCustomer = async (id: number) => {
+    if (confirm("Are you sure? This will remove the customer record.")) {
+      try {
+        // Use deleteCustomer endpoint, NOT deleteTransaction
+        await api.deleteCustomer(id); 
+        setPanelOpen(null);
+        loadData();
+      } catch (err) { 
+        alert("Could not delete customer. They might be linked to existing transactions."); 
+      }
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-[#F4F7FE] flex text-slate-900 font-sans overflow-x-hidden">
+      
+      {/* SIDEBAR */}
+      <aside className="hidden md:flex w-24 bg-white border-r border-slate-200 flex-col items-center py-8 space-y-12 sticky top-0 h-screen z-40">
+        <div className="flex flex-col items-center space-y-2">
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-blue-100">UJ</div>
+            <span className="text-[8px] font-black text-blue-600 text-center leading-tight">URANIUM<br/>JET</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <nav className="flex flex-col space-y-6">
+          <button onClick={() => setActiveTab('CUSTOMERS')} className={`p-4 rounded-2xl transition ${activeTab === 'CUSTOMERS' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-300 hover:text-slate-600'}`}><Users size={24}/></button>
+          <button onClick={() => setActiveTab('SALES')} className={`p-4 rounded-2xl transition ${activeTab === 'SALES' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-300 hover:text-slate-600'}`}><History size={24}/></button>
+        </nav>
+      </aside>
+
+      <main className="flex-1 p-4 md:p-8 lg:p-12 max-w-full overflow-hidden">
+        
+        {/* HEADER */}
+        <div className="mb-10">
+            <h1 className="text-sm font-black text-blue-600 tracking-[0.3em] uppercase">Uranium Jet Digital Solutions</h1>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Customer Management</h2>
+        </div>
+
+        {/* METRICS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm flex justify-between items-center">
+            <div><p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Active Clients</p><h3 className="text-3xl font-black">{customers.length}</h3></div>
+            <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Users size={28}/></div>
+          </div>
+          
+          <div className="bg-slate-900 p-8 rounded-[32px] text-white shadow-xl flex justify-between items-center relative overflow-hidden">
+            <div className="z-10">
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Total Revenue</p>
+                <h3 className="text-3xl font-black">{showFinancials ? `₦${totalRevenue.toLocaleString()}` : '₦ •••••••'}</h3>
+            </div>
+            <button onClick={() => setShowFinancials(!showFinancials)} className="z-10 p-4 bg-slate-800 rounded-2xl hover:bg-slate-700 transition">
+              {showFinancials ? <EyeOff size={20}/> : <Eye size={20}/>}
+            </button>
+          </div>
+
+          <div className="bg-blue-600 p-8 rounded-[32px] text-white shadow-xl shadow-blue-100 flex justify-between items-center">
+            <div>
+                <p className="text-blue-200 text-xs font-bold uppercase tracking-widest mb-1">Net Profit</p>
+                <h3 className="text-3xl font-black">{showFinancials ? `₦${totalProfit.toLocaleString()}` : '₦ •••••••'}</h3>
+            </div>
+            <TrendingUp size={28} className="opacity-50" />
+          </div>
+        </div>
+
+        {/* TOOLBAR */}
+        <div className="flex flex-wrap gap-4 justify-between items-center mb-8">
+          <div className="relative w-full md:w-96">
+            <Search className="absolute left-5 top-4.5 text-slate-300" size={20} />
+            <input type="text" placeholder="Search records..." className="w-full bg-white pl-14 pr-4 py-4 rounded-3xl border-none shadow-sm focus:ring-4 focus:ring-blue-100 outline-none font-medium" onChange={(e)=>setSearchQuery(e.target.value)} />
+          </div>
+          <div className="flex gap-3 w-full md:w-auto">
+            <button onClick={() => {setSelectedItem(null); setCustForm({name:'', phone:''}); setPanelOpen('CLIENT');}} className="flex-1 md:flex-none px-8 py-4 bg-white text-slate-700 font-bold rounded-3xl shadow-sm border border-slate-100 flex items-center justify-center hover:bg-slate-50 transition"><UserPlus size={20} className="mr-2 text-blue-600"/> New Client</button>
+            <button onClick={() => setPanelOpen('SALE')} className="flex-1 md:flex-none px-8 py-4 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-200 flex items-center justify-center hover:scale-105 transition"><Plus size={20} className="mr-2"/> New Sale</button>
+          </div>
+        </div>
+
+        {/* DATA TABLE */}
+        <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left min-w-[700px]">
+              <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">
+                {activeTab === 'CUSTOMERS' ? (
+                  <tr><th className="p-8">Client Name</th><th className="p-8">Contact</th><th className="p-8 text-right">Management</th></tr>
+                ) : (
+                  <tr><th className="p-8">Date</th><th className="p-8">Service</th><th className="p-8">Customer</th><th className="p-8 text-right">Profit</th><th className="p-8 text-right">Action</th></tr>
+                )}
+              </thead>
+              <tbody className="divide-y divide-slate-50 text-sm">
+                {activeTab === 'CUSTOMERS' ? customers.filter(c=>c.name.toLowerCase().includes(searchQuery.toLowerCase())).map((c:any) => (
+                  <tr key={c.id} className="hover:bg-slate-50/50 transition group">
+                    <td className="p-8 font-black text-slate-700 text-base uppercase tracking-tighter">{c.name}</td>
+                    <td className="p-8 font-mono text-slate-500">{c.phone}</td>
+                    <td className="p-8 text-right">
+                        <button onClick={()=>{setSelectedItem(c); setCustForm({name: c.name, phone: c.phone}); setPanelOpen('PROFILE')}} className="px-6 py-3 bg-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all">View Profile</button>
+                    </td>
+                  </tr>
+                )) : transactions.filter(t=>t.customer_name?.toLowerCase().includes(searchQuery.toLowerCase())).map((s:any) => (
+                  <tr key={s.id} className="hover:bg-slate-50/50 transition">
+                    <td className="p-8 text-slate-400 font-bold">{s.date}</td>
+                    <td className="p-8 font-black uppercase tracking-tighter">{s.customer_name}</td>
+                    <td className="p-8 text-right font-black text-emerald-600">
+                        {showFinancials ? `₦${parseFloat(s.profit).toLocaleString()}` : '₦ •••'}
+                    </td>
+                    <td className="p-8 text-right"><button onClick={() => api.deleteTransaction(s.id).then(loadData)} className="text-slate-300 hover:text-red-500 transition"><Trash2 size={20}/></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </main>
+
+      {/* --- PANEL SYSTEM --- */}
+      {panelOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setPanelOpen(null)} />
+          <div className="relative w-full max-w-xl bg-white h-full shadow-2xl p-12 overflow-y-auto animate-in slide-in-from-right">
+            
+            <div className="flex justify-between items-center mb-12">
+              <h2 className="text-3xl font-black uppercase tracking-tighter">{panelOpen === 'PROFILE' ? 'Client Profile' : panelOpen}</h2>
+              <button onClick={() => setPanelOpen(null)} className="p-4 bg-slate-100 rounded-full hover:bg-red-50 hover:text-red-500 transition"><X/></button>
+            </div>
+
+            {/* PROFILE VIEW */}
+            {panelOpen === 'PROFILE' && selectedItem && (
+                <div className="space-y-10">
+                    <div className="flex items-center space-x-6 pb-10 border-b border-slate-100">
+                        <div className="w-24 h-24 bg-blue-600 rounded-[32px] flex items-center justify-center text-4xl text-white font-black">{selectedItem.name[0]}</div>
+                        <div>
+                            <h3 className="text-4xl font-black text-slate-800 uppercase tracking-tighter mb-2">{selectedItem.name}</h3>
+                            <p className="text-slate-400 font-mono text-lg">{selectedItem.phone}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <button onClick={() => window.open(`https://wa.me/${selectedItem.phone}`)} className="flex items-center justify-center p-6 bg-emerald-500 text-white rounded-3xl font-black hover:bg-emerald-600 transition shadow-lg"><MessageCircle className="mr-2"/> WhatsApp</button>
+                        <button onClick={() => {setPanelOpen('CLIENT');}} className="flex items-center justify-center p-6 bg-slate-100 text-slate-600 rounded-3xl font-black hover:bg-slate-200 transition"><Edit3 className="mr-2"/> Update Info</button>
+                    </div>
+
+                    <div className="pt-10 border-t border-slate-100">
+                        <button onClick={() => handleDeleteCustomer(selectedItem.id)} className="w-full flex items-center justify-center p-6 text-red-400 font-black hover:text-red-600 hover:bg-red-50 rounded-3xl transition border border-transparent hover:border-red-100">
+                            <Trash2 size={20} className="mr-3"/> Permanently Remove Client
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* SALE FORM */}
+            {panelOpen === 'SALE' && (
+              <form onSubmit={handleSaleSubmit} className="space-y-8">
+                <select required className="w-full p-6 bg-slate-50 rounded-3xl border-none outline-none font-bold" onChange={(e)=>setSaleForm({...saleForm, customer: e.target.value})}>
+                  <option value="">Choose a Client</option>
+                  {customers.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <div className="grid grid-cols-2 gap-6">
+                  <input type="number" required placeholder="Revenue (₦)" className="w-full p-6 bg-slate-50 rounded-3xl font-bold text-xl" onChange={(e)=>setSaleForm({...saleForm, revenue: parseFloat(e.target.value)})}/>
+                  <input type="number" required placeholder="Cost (₦)" className="w-full p-6 bg-slate-50 rounded-3xl font-bold text-xl" onChange={(e)=>setSaleForm({...saleForm, cost: parseFloat(e.target.value)})}/>
+                </div>
+                <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-3xl font-black text-xl shadow-xl shadow-blue-100">Confirm Sale</button>
+              </form>
+            )}
+
+            {/* CLIENT FORM */}
+            {panelOpen === 'CLIENT' && (
+              <form onSubmit={handleCustSubmit} className="space-y-8">
+                <input placeholder="Name" value={custForm.name} required className="w-full p-6 bg-slate-50 rounded-3xl outline-none text-xl font-bold uppercase" onChange={(e)=>setCustForm({...custForm, name:e.target.value})}/>
+                <input placeholder="Phone" value={custForm.phone} required className="w-full p-6 bg-slate-50 rounded-3xl outline-none text-xl font-bold font-mono" onChange={(e)=>setCustForm({...custForm, phone:e.target.value})}/>
+                <button type="submit" className="w-full py-6 bg-slate-900 text-white rounded-3xl font-black text-xl">
+                    {selectedItem ? 'Update Client Record' : 'Register New Client'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
