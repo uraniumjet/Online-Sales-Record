@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import * as api from '../src/lib/api'; 
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   Users, Plus, Search, Printer, Plane, X, Receipt, Save, 
   History, Eye, EyeOff, Trash2, Edit3, MessageCircle, 
@@ -21,7 +23,6 @@ export default function Dashboard() {
     customer: '', service_type: 'PRINTING', description: 'General Service', revenue: 0, cost: 0, date: new Date().toISOString().split('T')[0] 
   });
   
-  // State for Customer Form
   const [custForm, setCustForm] = useState({ name: '', phone: '' });
 
   useEffect(() => { loadData(); }, []);
@@ -39,6 +40,52 @@ export default function Dashboard() {
   const totalRevenue = transactions.reduce((sum, t: any) => sum + (parseFloat(t.revenue) || 0), 0);
   const totalProfit = transactions.reduce((sum, t: any) => sum + (parseFloat(t.profit) || 0), 0);
 
+  // --- PDF GENERATION LOGIC ---
+  const generateReceipt = (transaction: any) => {
+    const doc = new jsPDF();
+    doc.setFontSize(20);
+    doc.setTextColor(40, 100, 250); 
+    doc.text("URANIUM JET DIGITAL SOLUTIONS", 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text("Official Service Receipt", 14, 30);
+    doc.text(`Date: ${transaction.date}`, 160, 30);
+
+    doc.setDrawColor(230);
+    doc.line(14, 35, 196, 35); 
+    
+    doc.setFontSize(12);
+    doc.setTextColor(0);
+    doc.text("Billed To:", 14, 45);
+    doc.setFont("helvetica", "bold");
+    doc.text(`${transaction.customer_name || 'Valued Customer'}`, 14, 52);
+    
+    autoTable(doc, {
+      startY: 60,
+      head: [['Description', 'Service Type', 'Amount']],
+      body: [
+        [
+          transaction.description || "Digital Service Rendered",
+          transaction.service_type,
+          `NGN ${parseFloat(transaction.revenue).toLocaleString()}`
+        ],
+      ],
+      headStyles: { fillColor: [40, 100, 250] },
+      theme: 'striped'
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY || 70;
+    doc.setFontSize(14);
+    doc.text(`Total Paid: NGN ${parseFloat(transaction.revenue).toLocaleString()}`, 14, finalY + 15);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(150);
+    doc.text("Thank you for choosing Uranium Jet!", 14, finalY + 30);
+    doc.save(`Receipt_${transaction.customer_name}_${transaction.date}.pdf`);
+  };
+
+  // --- API HANDLERS ---
   const handleSaleSubmit = async (e: any) => {
     e.preventDefault();
     try {
@@ -49,33 +96,28 @@ export default function Dashboard() {
     } catch (err) { alert("Error saving sale."); }
   };
 
-  // --- FIXED CUSTOMER LOGIC ---
   const handleCustSubmit = async (e: any) => {
     e.preventDefault();
     try {
       if (selectedItem) {
-        // Use updateCustomer endpoint, NOT updateTransaction
         await api.updateCustomer(selectedItem.id, custForm); 
       } else {
         await api.createCustomer(custForm);
       }
       setPanelOpen(null);
       setSelectedItem(null);
-      setCustForm({ name: '', phone: '' }); // Clear form
+      setCustForm({ name: '', phone: '' });
       loadData();
-    } catch (err) { alert("Error saving customer. Ensure your API has updateCustomer defined."); }
+    } catch (err) { alert("Error saving customer."); }
   };
 
   const handleDeleteCustomer = async (id: number) => {
-    if (confirm("Are you sure? This will remove the customer record.")) {
+    if (confirm("Are you sure?")) {
       try {
-        // Use deleteCustomer endpoint, NOT deleteTransaction
         await api.deleteCustomer(id); 
         setPanelOpen(null);
         loadData();
-      } catch (err) { 
-        alert("Could not delete customer. They might be linked to existing transactions."); 
-      }
+      } catch (err) { alert("Delete failed."); }
     }
   };
 
@@ -94,9 +136,7 @@ export default function Dashboard() {
         </nav>
       </aside>
 
-      <main className="flex-1 p-4 md:p-8 lg:p-12 max-w-full overflow-hidden">
-        
-        {/* HEADER */}
+      <main className="flex-1 p-4 md:p-8 lg:p-12">
         <div className="mb-10">
             <h1 className="text-sm font-black text-blue-600 tracking-[0.3em] uppercase">Uranium Jet Digital Solutions</h1>
             <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Customer Management</h2>
@@ -104,26 +144,16 @@ export default function Dashboard() {
 
         {/* METRICS */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm flex justify-between items-center">
-            <div><p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Active Clients</p><h3 className="text-3xl font-black">{customers.length}</h3></div>
+          <div className="bg-white p-8 rounded-[32px] shadow-sm flex justify-between items-center">
+            <div><p className="text-slate-400 text-xs font-bold uppercase mb-1">Active Clients</p><h3 className="text-3xl font-black">{customers.length}</h3></div>
             <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Users size={28}/></div>
           </div>
-          
-          <div className="bg-slate-900 p-8 rounded-[32px] text-white shadow-xl flex justify-between items-center relative overflow-hidden">
-            <div className="z-10">
-                <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Total Revenue</p>
-                <h3 className="text-3xl font-black">{showFinancials ? `₦${totalRevenue.toLocaleString()}` : '₦ •••••••'}</h3>
-            </div>
-            <button onClick={() => setShowFinancials(!showFinancials)} className="z-10 p-4 bg-slate-800 rounded-2xl hover:bg-slate-700 transition">
-              {showFinancials ? <EyeOff size={20}/> : <Eye size={20}/>}
-            </button>
+          <div className="bg-slate-900 p-8 rounded-[32px] text-white shadow-xl flex justify-between items-center">
+            <div><p className="text-slate-500 text-xs font-bold uppercase mb-1">Total Revenue</p><h3 className="text-3xl font-black">{showFinancials ? `₦${totalRevenue.toLocaleString()}` : '₦ •••••••'}</h3></div>
+            <button onClick={() => setShowFinancials(!showFinancials)} className="p-4 bg-slate-800 rounded-2xl"><Eye size={20}/></button>
           </div>
-
-          <div className="bg-blue-600 p-8 rounded-[32px] text-white shadow-xl shadow-blue-100 flex justify-between items-center">
-            <div>
-                <p className="text-blue-200 text-xs font-bold uppercase tracking-widest mb-1">Net Profit</p>
-                <h3 className="text-3xl font-black">{showFinancials ? `₦${totalProfit.toLocaleString()}` : '₦ •••••••'}</h3>
-            </div>
+          <div className="bg-blue-600 p-8 rounded-[32px] text-white shadow-xl flex justify-between items-center">
+            <div><p className="text-blue-200 text-xs font-bold uppercase mb-1">Net Profit</p><h3 className="text-3xl font-black">{showFinancials ? `₦${totalProfit.toLocaleString()}` : '₦ •••••••'}</h3></div>
             <TrendingUp size={28} className="opacity-50" />
           </div>
         </div>
@@ -132,11 +162,11 @@ export default function Dashboard() {
         <div className="flex flex-wrap gap-4 justify-between items-center mb-8">
           <div className="relative w-full md:w-96">
             <Search className="absolute left-5 top-4.5 text-slate-300" size={20} />
-            <input type="text" placeholder="Search records..." className="w-full bg-white pl-14 pr-4 py-4 rounded-3xl border-none shadow-sm focus:ring-4 focus:ring-blue-100 outline-none font-medium" onChange={(e)=>setSearchQuery(e.target.value)} />
+            <input type="text" placeholder="Search records..." className="w-full bg-white pl-14 pr-4 py-4 rounded-3xl shadow-sm outline-none font-medium" onChange={(e)=>setSearchQuery(e.target.value)} />
           </div>
-          <div className="flex gap-3 w-full md:w-auto">
-            <button onClick={() => {setSelectedItem(null); setCustForm({name:'', phone:''}); setPanelOpen('CLIENT');}} className="flex-1 md:flex-none px-8 py-4 bg-white text-slate-700 font-bold rounded-3xl shadow-sm border border-slate-100 flex items-center justify-center hover:bg-slate-50 transition"><UserPlus size={20} className="mr-2 text-blue-600"/> New Client</button>
-            <button onClick={() => setPanelOpen('SALE')} className="flex-1 md:flex-none px-8 py-4 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-200 flex items-center justify-center hover:scale-105 transition"><Plus size={20} className="mr-2"/> New Sale</button>
+          <div className="flex gap-3">
+            <button onClick={() => {setSelectedItem(null); setCustForm({name:'', phone:''}); setPanelOpen('CLIENT');}} className="px-8 py-4 bg-white text-slate-700 font-bold rounded-3xl border border-slate-100 flex items-center shadow-sm"><UserPlus size={20} className="mr-2 text-blue-600"/> New Client</button>
+            <button onClick={() => setPanelOpen('SALE')} className="px-8 py-4 bg-blue-600 text-white font-black rounded-3xl shadow-xl flex items-center"><Plus size={20} className="mr-2"/> New Sale</button>
           </div>
         </div>
 
@@ -148,26 +178,35 @@ export default function Dashboard() {
                 {activeTab === 'CUSTOMERS' ? (
                   <tr><th className="p-8">Client Name</th><th className="p-8">Contact</th><th className="p-8 text-right">Management</th></tr>
                 ) : (
-                  <tr><th className="p-8">Date</th><th className="p-8">Service</th><th className="p-8">Customer</th><th className="p-8 text-right">Profit</th><th className="p-8 text-right">Action</th></tr>
+                  <tr><th className="p-8">Date</th><th className="p-8">Customer</th><th className="p-8 text-right">Profit</th><th className="p-8 text-right">Actions</th></tr>
                 )}
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm">
                 {activeTab === 'CUSTOMERS' ? customers.filter(c=>c.name.toLowerCase().includes(searchQuery.toLowerCase())).map((c:any) => (
                   <tr key={c.id} className="hover:bg-slate-50/50 transition group">
-                    <td className="p-8 font-black text-slate-700 text-base uppercase tracking-tighter">{c.name}</td>
+                    <td className="p-8 font-black text-slate-700 text-base uppercase">{c.name}</td>
                     <td className="p-8 font-mono text-slate-500">{c.phone}</td>
                     <td className="p-8 text-right">
-                        <button onClick={()=>{setSelectedItem(c); setCustForm({name: c.name, phone: c.phone}); setPanelOpen('PROFILE')}} className="px-6 py-3 bg-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all">View Profile</button>
+                        <button onClick={()=>{setSelectedItem(c); setCustForm({name: c.name, phone: c.phone}); setPanelOpen('PROFILE')}} className="px-6 py-3 bg-slate-100 rounded-2xl text-[10px] font-black uppercase text-slate-500 hover:bg-blue-600 hover:text-white transition-all">View Profile</button>
                     </td>
                   </tr>
                 )) : transactions.filter(t=>t.customer_name?.toLowerCase().includes(searchQuery.toLowerCase())).map((s:any) => (
                   <tr key={s.id} className="hover:bg-slate-50/50 transition">
                     <td className="p-8 text-slate-400 font-bold">{s.date}</td>
-                    <td className="p-8 font-black uppercase tracking-tighter">{s.customer_name}</td>
+                    <td className="p-8 font-black text-slate-700 uppercase">{s.customer_name}</td>
                     <td className="p-8 text-right font-black text-emerald-600">
                         {showFinancials ? `₦${parseFloat(s.profit).toLocaleString()}` : '₦ •••'}
                     </td>
-                    <td className="p-8 text-right"><button onClick={() => api.deleteTransaction(s.id).then(loadData)} className="text-slate-300 hover:text-red-500 transition"><Trash2 size={20}/></button></td>
+                    <td className="p-8 text-right flex gap-2 justify-end">
+                        {/* --- THE PDF BUTTON IN THE CORRECT PLACE --- */}
+                        <button 
+                          onClick={() => generateReceipt(s)} 
+                          className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition shadow-sm"
+                        >
+                          <Printer size={18}/>
+                        </button>
+                        <button onClick={() => api.deleteTransaction(s.id).then(loadData)} className="p-3 text-slate-300 hover:text-red-500 transition"><Trash2 size={20}/></button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -181,40 +220,31 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setPanelOpen(null)} />
           <div className="relative w-full max-w-xl bg-white h-full shadow-2xl p-12 overflow-y-auto animate-in slide-in-from-right">
-            
             <div className="flex justify-between items-center mb-12">
-              <h2 className="text-3xl font-black uppercase tracking-tighter">{panelOpen === 'PROFILE' ? 'Client Profile' : panelOpen}</h2>
-              <button onClick={() => setPanelOpen(null)} className="p-4 bg-slate-100 rounded-full hover:bg-red-50 hover:text-red-500 transition"><X/></button>
+              <h2 className="text-3xl font-black uppercase tracking-tighter">{panelOpen}</h2>
+              <button onClick={() => setPanelOpen(null)} className="p-4 bg-slate-100 rounded-full"><X/></button>
             </div>
 
-            {/* PROFILE VIEW */}
             {panelOpen === 'PROFILE' && selectedItem && (
                 <div className="space-y-10">
-                    <div className="flex items-center space-x-6 pb-10 border-b border-slate-100">
+                    <div className="flex items-center space-x-6 pb-10 border-b">
                         <div className="w-24 h-24 bg-blue-600 rounded-[32px] flex items-center justify-center text-4xl text-white font-black">{selectedItem.name[0]}</div>
                         <div>
-                            <h3 className="text-4xl font-black text-slate-800 uppercase tracking-tighter mb-2">{selectedItem.name}</h3>
+                            <h3 className="text-4xl font-black uppercase mb-2">{selectedItem.name}</h3>
                             <p className="text-slate-400 font-mono text-lg">{selectedItem.phone}</p>
                         </div>
                     </div>
-
                     <div className="grid grid-cols-2 gap-4">
-                        <button onClick={() => window.open(`https://wa.me/${selectedItem.phone}`)} className="flex items-center justify-center p-6 bg-emerald-500 text-white rounded-3xl font-black hover:bg-emerald-600 transition shadow-lg"><MessageCircle className="mr-2"/> WhatsApp</button>
-                        <button onClick={() => {setPanelOpen('CLIENT');}} className="flex items-center justify-center p-6 bg-slate-100 text-slate-600 rounded-3xl font-black hover:bg-slate-200 transition"><Edit3 className="mr-2"/> Update Info</button>
+                        <button onClick={() => window.open(`https://wa.me/${selectedItem.phone}`)} className="p-6 bg-emerald-500 text-white rounded-3xl font-black shadow-lg"><MessageCircle className="mr-2"/> WhatsApp</button>
+                        <button onClick={() => {setPanelOpen('CLIENT');}} className="p-6 bg-slate-100 text-slate-600 rounded-3xl font-black"><Edit3 className="mr-2"/> Update Info</button>
                     </div>
-
-                    <div className="pt-10 border-t border-slate-100">
-                        <button onClick={() => handleDeleteCustomer(selectedItem.id)} className="w-full flex items-center justify-center p-6 text-red-400 font-black hover:text-red-600 hover:bg-red-50 rounded-3xl transition border border-transparent hover:border-red-100">
-                            <Trash2 size={20} className="mr-3"/> Permanently Remove Client
-                        </button>
-                    </div>
+                    <button onClick={() => handleDeleteCustomer(selectedItem.id)} className="w-full p-6 text-red-400 font-black hover:bg-red-50 rounded-3xl border border-red-50">Remove Client</button>
                 </div>
             )}
 
-            {/* SALE FORM */}
             {panelOpen === 'SALE' && (
               <form onSubmit={handleSaleSubmit} className="space-y-8">
-                <select required className="w-full p-6 bg-slate-50 rounded-3xl border-none outline-none font-bold" onChange={(e)=>setSaleForm({...saleForm, customer: e.target.value})}>
+                <select required className="w-full p-6 bg-slate-50 rounded-3xl font-bold" onChange={(e)=>setSaleForm({...saleForm, customer: e.target.value})}>
                   <option value="">Choose a Client</option>
                   {customers.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -226,7 +256,6 @@ export default function Dashboard() {
               </form>
             )}
 
-            {/* CLIENT FORM */}
             {panelOpen === 'CLIENT' && (
               <form onSubmit={handleCustSubmit} className="space-y-8">
                 <input placeholder="Name" value={custForm.name} required className="w-full p-6 bg-slate-50 rounded-3xl outline-none text-xl font-bold uppercase" onChange={(e)=>setCustForm({...custForm, name:e.target.value})}/>
